@@ -133,7 +133,3 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
 3. Проверить AJAX-ответ: `BX.ajax({url: '/local/ChatTransparent/ajax.php', method: 'POST', data: {action: 'getChildChats', dealId: 123}, onsuccess: console.log})`
 4. Пустой массив `[]` — RelationManager не нашёл связь. Попробовать альтернативный SQL в `ajax.php`
 5. Ошибка 500 — проверить `/bitrix/php_error_log`
-
-## Лицензия
-
-MIT
