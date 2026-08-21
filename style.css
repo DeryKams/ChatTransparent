@@ -1,0 +1,122 @@
+/**
+ * ChatTransparent — минимальные стили.
+ *
+ * Внешний вид кнопки чата смарт-процесса идентичен нативному виджету
+ * (crm-entity-stream-section-live-im), поэтому почти все стили берутся
+ * из CSS-фреймворка Bitrix24. Здесь только наши небольшие добавки.
+ */
+
+/* Кастомная иконка чата смарт-процесса — отличается от дефолтного чата сделки.
+   Дефолтный чат (.crm-entity-stream-section-icon-live-im) — зелёный (#9dcf00).
+   Наш — синий, чтобы визуально отделить.
+   Все иконки таймлайна используют спрайт /bitrix/components/bitrix/crm.timeline/templates/.default/images/icons-sprite.svg
+   и отличаются только background-position (см. style.css компонента, строки 251-354).
+   Значения background-position для доступных иконок:
+     -1211px = чат (live-im, используется по умолчанию)
+     0px     = IM (мессенджер)
+     -30px   = звонок
+     -61px   = email
+     -92px   = форма
+     -123px  = задача
+     -154px  = встреча
+     -247px  = ожидание
+     -712px  = робот
+     -911px  = визит
+     -1085px = бизнес-процесс
+     -1132px = REST-приложение
+     -1173px = документ
+     -1211px = чат (live-im)
+     -1248px = склад
+   Чтобы поменять значок — поменяй background-position ниже. */
+.ct-chat-icon
+{
+    background-color: #2fc7ff !important;  /* синий вместо зелёного */
+    /* background-position: center -1211px; */  /* раскомментируй и поменяй для другого значка */
+
+    /* Иконка — чисто визуальный элемент, не участвует в кликах.
+       pointer-events: none пропускает клик насквозь к родительскому
+       блоку .ct-chat-button, где висит обработчик.
+       Также убирает курсор-указатель (cursor: pointer) с иконки —
+       остаётся дефолтный курсор, как у обычного значка. */
+    pointer-events: none;
+}
+
+/* Надпись "Чат Смарт-процесса" внутри кнопки */
+.ct-chat-label
+{
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ui-color-text-primary, #333);
+    margin-bottom: 8px;
+    display: inline-block;
+}
+
+/* Кнопка чата смарт-процесса — курсор-указатель при наведении */
+.ct-chat-button
+{
+    cursor: pointer;
+    /* Плавный переход для визуальной обратной связи при клике */
+    transition: opacity 0.2s ease;
+}
+
+/* При наведении — лёгкое подсвечивание (как нативный чат) */
+.ct-chat-button:hover .crm-entity-stream-content-live-im-detail
+{
+    background-color: var(--ui-color-background-hover, #f5f5f5);
+    border-radius: 6px;
+}
+
+/* Аватары пользователей — выравнивание в строку */
+.ct-chat-button .crm-entity-stream-live-im-user-avatars
+{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Разделитель между аватарами и сообщением */
+.ct-chat-button .crm-entity-stream-live-im-separator
+{
+    margin: 8px 0;
+}
+
+/* Блок последнего сообщения */
+.ct-chat-button .crm-entity-stream-live-im-messanger
+{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Текст последнего сообщения — обрезка длинных строк */
+.ct-chat-button .crm-entity-stream-live-im-message-text
+{
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
+    color: var(--ui-color-text-secondary, #666);
+    font-size: 13px;
+}
+
+/* Время последнего сообщения */
+.ct-chat-button .crm-entity-stream-live-im-time
+{
+    color: var(--ui-color-text-tertiary, #999);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* Счётчик непрочитанных сообщений */
+.ct-chat-button .crm-entity-stream-live-im-message-counter
+{
+    background: var(--ui-color-accent-main-primary, #2fc7ff);
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 20px;
+    text-align: center;
+    line-height: 20px;
+}

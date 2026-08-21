@@ -1,0 +1,23 @@
+<?php
+/**
+ * Пример файла /local/php_interface/init.php
+ *
+ * Этот файл — точка подключения всех кастомных хуков для Bitrix24.
+ * Bitrix24 автоматически загружает /local/php_interface/init.php
+ * на каждой странице (через prolog_before.php).
+ *
+ * Файл ChatTransparent/handler.php вешает хук OnProlog,
+ * который детектит страницу сделки и подключает JS/CSS.
+ *
+ * Установка:
+ * 1. Скопируй этот файл в /local/php_interface/init.php
+ *    (если init.php уже существует — добавь в него строку require_once
+ *    из блока ChatTransparent, не перезаписывай весь файл!)
+ * 2. Убедись, что папка /local/ChatTransparent/ с файлами
+ *    handler.php, ajax.php, script.js, style.css лежит на сервере.
+ * 3. Очисти кэш Bitrix24.
+ */
+
+// Если init.php уже существует на сервере — добавь только эту строку
+// (где-нибудь после <?php, до конца файла):
+require_once __DIR__ . '/../ChatTransparent/handler.php';
