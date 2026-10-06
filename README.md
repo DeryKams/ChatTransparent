@@ -27,6 +27,7 @@
 
 ```
 /local/ChatTransparent/
+  config.php
   handler.php
   ajax.php
   script.js
@@ -47,16 +48,28 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
 
 ## Настройка
 
-Все параметры — вверху `handler.php` и `ajax.php`.
+Все изменяемые параметры модуля собраны в одном файле — `config.php`. `handler.php` и `ajax.php` больше не объявляют эти константы.
 
 | Параметр | Файл | По умолчанию | Описание |
 |---|---|---|---|
-| `CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID` | `handler.php`, `ajax.php` | `1042` | entityTypeId смарт-процесса. Берётся из URL: `/page/.../type/1042/details/1459/` |
-| `buttonLabel` | `handler.php` | `Чат Смарт-процесса` | Текст когда чат есть |
-| `inviteLabel` | `handler.php` | `Пригласить к обсуждению` | Текст когда чата нет |
-| `CHAT_TRANSPARENT_DEAL_URL_REGEX` | `handler.php` | `#/crm/deal/details/(\d+)#` | Регулярка для детекта страницы сделки |
+| `CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID` | `config.php` | `1042` | entityTypeId смарт-процесса. Берётся из URL: `/page/.../type/1042/details/1459/` |
+| `CHAT_TRANSPARENT_ACCESS_MODE` | `config.php` | `deal` | Механизм доступа: `sp` или `deal` |
+| `CHAT_TRANSPARENT_DEAL_URL_REGEX` | `config.php` | `#/crm/deal/details/(\d+)#` | Регулярка для детекта страницы сделки |
 
-При смене типа смарт-процесса — поменять `CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID` в **обоих** файлах (`handler.php` и `ajax.php`).
+При смене типа смарт-процесса поменяйте `CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID` только в `config.php`.
+
+## Механизмы доступа
+
+| Значение `CHAT_TRANSPARENT_ACCESS_MODE` | Как открывается чат | Какое право нужно |
+|---|---|---|
+| `sp` | Нативный `BX.ajax.runAction('crm.timeline.chat.get')` | Право чтения самого смарт-процесса (`canRead` по СП). Без него Bitrix24 вернёт «Доступ запрещен» |
+| `deal` | Собственный action `joinChildChat` в `ajax.php` | Право чтения сделки; отдельное право чтения СП не требуется |
+
+В режиме `deal` сервер проверяет Bitrix sessid, право текущего пользователя на чтение сделки и связь запрошенного СП с этой сделкой через `RelationManager::getChildElements()`. Войти в чат по подмене ID сделки или СП нельзя.
+
+При создании чата Bitrix24 автоматически добавляет ответственного и наблюдателей СП. Участник, который уже вошёл в чат, остаётся в нём, даже если позже у него отзовут доступ к сделке. Если такое поведение нежелательно, участника нужно удалить из чата отдельно.
+
+Чтобы сменить режим, задайте `CHAT_TRANSPARENT_ACCESS_MODE` в одном файле — `config.php`. По умолчанию активен режим `deal`.
 
 ## Арххитектура
 
@@ -65,7 +78,7 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
        │
        ▼
  handler.php  ◄── OnProlog хук, инъекция JS/CSS
-       │         детектит URL сделки, передаёт dealId в config
+       │         детектит URL сделки, передаёт dealId и accessMode в config
        ▼
  script.js    ◄── MutationObserver ждёт таймлайн
        │         AJAX-запрос к ajax.php
@@ -82,9 +95,8 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
        └─ чата нет → «Пригласить к обсуждению» + кнопка-приглашение
        │
        ▼  клик
- crm.timeline.chat.get  ◄── нативный AJAX-контроллер Bitrix24
-       │                   вызывает Im\Chat::joinChat()
-       │                   находит или создаёт чат
+ accessMode=sp   → crm.timeline.chat.get (право чтения СП)
+ accessMode=deal → ajax.php:joinChildChat (право чтения сделки + связь СП)
        ▼
  BX.Messenger.Public.openChat('chat' + chatId)
 ```
@@ -111,6 +123,7 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
 
 | Файл | Назначение |
 |---|---|
+| `config.php` | Единая конфигурация изменяемых параметров модуля |
 | `handler.php` | OnProlog хук: детект страницы сделки, инъекция JS/CSS |
 | `ajax.php` | AJAX-эндпоинт: поиск смарт-процессов, сбор данных чатов |
 | `script.js` | Рендер кнопки в таймлайне, клик-обработчик, открытие мессенджера |
@@ -129,7 +142,7 @@ require_once __DIR__ . '/../ChatTransparent/handler.php';
 ## Диагностика
 
 1. Открыть консоль браузера (F12) на странице сделки
-2. Проверить `window.ChatTransparentConfig` — должен содержать `dealId`, `ajaxUrl`, `buttonLabel`, `inviteLabel`
-3. Проверить AJAX-ответ: `BX.ajax({url: '/local/ChatTransparent/ajax.php', method: 'POST', data: {action: 'getChildChats', dealId: 123}, onsuccess: console.log})`
+2. Проверить `window.ChatTransparentConfig` — должен содержать `dealId`, `accessMode`, `ajaxUrl`, `buttonLabel`, `inviteLabel`
+3. Проверить AJAX-ответ: `BX.ajax({url: '/local/ChatTransparent/ajax.php', method: 'POST', data: {action: 'getChildChats', dealId: 123, sessid: BX.message('bitrix_sessid')}, onsuccess: console.log})`
 4. Пустой массив `[]` — RelationManager не нашёл связь. Попробовать альтернативный SQL в `ajax.php`
 5. Ошибка 500 — проверить `/bitrix/php_error_log`

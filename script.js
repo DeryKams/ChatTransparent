@@ -10,7 +10,7 @@
  * 3. Для каждого — рендерит блок-кнопку по нативной HTML-структуре:
  *    - Если чат есть: надпись "Чат Смарт-процесса" + последнее сообщение
  *    - Если чата нет: надпись "Пригласить к обсуждению" (при клике чат создастся)
- * 4. При клике — вызывает нативный crm.timeline.chat.get, открывает мессенджер
+ * 4. При клике — входит в чат по выбранному механизму доступа
  *
  * Конфигурация берётся из window.ChatTransparentConfig (инъекцируется handler.php).
  */
@@ -371,7 +371,8 @@
 
     /**
      * При клике на кнопку чата:
-     * 1. Вызывает нативный AJAX-контроллер crm.timeline.chat.get
+     * 1. В режиме deal вызывает наш AJAX, в режиме sp — нативный
+     *    AJAX-контроллер crm.timeline.chat.get
      * 2. Получает chatId (joinChat находит или создаёт чат)
      * 3. Открывает мессенджер через BX.Messenger.Public.openChat
      */
@@ -407,6 +408,40 @@
         // Визуальная индикация загрузки
         button.style.opacity = '0.6';
         button.style.pointerEvents = 'none';
+
+        if (config.accessMode === 'deal')
+        {
+            BX.ajax({
+                url: ajaxUrl,
+                method: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'joinChildChat',
+                    dealId: dealId,
+                    entityTypeId: entityTypeId,
+                    entityId: entityId,
+                    sessid: BX.message('bitrix_sessid')
+                },
+                onsuccess: function(response)
+                {
+                    resetButtonLoading(button);
+
+                    if (response && response.chatId > 0)
+                    {
+                        top.BX.Messenger.Public.openChat('chat' + response.chatId);
+                        return;
+                    }
+
+                    showChatError(response && response.error ? response.error : 'chat');
+                },
+                onfailure: function()
+                {
+                    resetButtonLoading(button);
+                    showChatError('request');
+                }
+            });
+            return;
+        }
 
         // Вызываем нативный контроллер Bitrix24 для открытия чата сущности.
         // crm.timeline.chat.get вызывает Im\Chat::joinChat(), который:
@@ -452,6 +487,37 @@
     // ============================================================
     // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
     // ============================================================
+
+    /**
+     * Снимает с кнопки индикацию загрузки.
+     */
+    function resetButtonLoading(button)
+    {
+        button.style.opacity = '';
+        button.style.pointerEvents = '';
+    }
+
+    /**
+     * Показывает понятную ошибку нашего AJAX-обработчика.
+     */
+    function showChatError(errorCode)
+    {
+        var messages = {
+            session: 'Сессия истекла. Обновите страницу.',
+            access_mode: 'Режим входа по правам сделки отключён.',
+            invalid: 'Переданы неверные данные чата.',
+            user: 'Не удалось определить текущего пользователя.',
+            access_deal: 'Нет права чтения сделки.',
+            not_related: 'Смарт-процесс не привязан к этой сделке.',
+            chat: 'Не удалось открыть чат.',
+            request: 'Ошибка запроса при открытии чата.'
+        };
+
+        BX.UI.Notification.Center.notify({
+            content: messages[errorCode] || 'Ошибка открытия чата',
+            autoHideDelay: 5000
+        });
+    }
 
     /**
      * Форматирует ISO-дату последнего сообщения в формат "ЧЧ:ММ".

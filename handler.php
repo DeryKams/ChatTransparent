@@ -18,23 +18,7 @@ if (defined('CHAT_TRANSPARENT_HANDLER_INCLUDED'))
 }
 define('CHAT_TRANSPARENT_HANDLER_INCLUDED', true);
 
-/**
- * ============================================================
- * КОНФИГУРАЦИЯ — меняй эти значения под свой портал
- * ============================================================
- */
-
-// entityTypeId смарт-процесса, чат которого мы показываем в карточке сделки.
-// Это число из URL смарт-процесса: /page/.../type/1042/details/1459/
-// Здесь 1042 — это entityTypeId (тип сущности), 1459 — itemId (конкретная запись).
-// Если понадобится другой смарт-процесс — поменяй эту константу.
-const CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID = 1042;
-
-// Регулярка для детекта страницы карточки сделки.
-// Стандартный URL:  /crm/deal/details/123/
-// SPA-вариант:      /page/.../deal/details/123/  или  /crm/deal/details/
-// Также покрывает цифровые рабочие места.
-const CHAT_TRANSPARENT_DEAL_URL_REGEX = '#/crm/deal/details/(\d+)#';
+require_once __DIR__ . '/config.php';
 
 /**
  * ============================================================
@@ -72,6 +56,7 @@ AddEventHandler('main', 'OnProlog', static function ()
     $config = [
         'dealId'             => $dealId,
         'smartProcessTypeId' => CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID,
+        'accessMode'         => CHAT_TRANSPARENT_ACCESS_MODE,
         'ajaxUrl'            => $moduleDir . '/ajax.php',
         // Текст надписи когда чат уже существует
         'buttonLabel'        => '',

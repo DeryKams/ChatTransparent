@@ -4,6 +4,7 @@
  *
  * Принимает POST-запросы от script.js:
  *   action=getChildChats  dealId=123
+ *   action=joinChildChat  dealId=123  entityTypeId=1042  entityId=1459
  *
  * Возвращает JSON-массив смарт-процессов заданного типа (по умолчанию 1042),
  * привязанных к сделке, с данными их чатов:
@@ -13,54 +14,49 @@
  *
  * Если у смарт-процесса нет чата (chatId = 0) — он возвращается с
  * hasChat: false. Кнопка рендерится в режиме "Пригласить к обсуждению".
- * При клике joinChat() создаст чат автоматически.
+ * При клике выбранный механизм создаст чат автоматически.
  *
  * ВАЖНО: этот файл подключает prolog_before.php — он выполняется
  * в контексте Bitrix24 и имеет доступ ко всем API.
  */
 
-// ==================================================================
-// КОНФИГУРАЦИЯ — меняй эти значения под свой портал
-// ==================================================================
-
-// entityTypeId смарт-процесса, чат которого мы показываем в сделке.
-// Это число из URL: /page/.../type/1042/details/1459/
-// Здесь 1042 — entityTypeId (тип сущности).
-const CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID = 1042;
-
 // entityTypeId сделки (в Bitrix24 это всегда 2 — CCrmOwnerType::Deal)
 const CHAT_TRANSPARENT_DEAL_TYPE_ID = 2;
 
-// ==================================================================
 // BOOTSTRAP BITRIX24
-// ==================================================================
 
 // prolog_before.php — даёт доступ ко всем API Bitrix24 (CModule, Loader, и т.д.)
 // Без этой строки: Fatal error: Class "CModule" not found
 require_once $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_before.php';
+require_once __DIR__ . '/config.php';
 
 // Подключаем модули CRM и IM (мессенджер)
 \Bitrix\Main\Loader::includeModule('crm');
 \Bitrix\Main\Loader::includeModule('im');
 
-// ==================================================================
 // ВХОДНЫЕ ДАННЫЕ
-// ==================================================================
 
 $action = $_POST['action'] ?? '';
 $dealId = (int)($_POST['dealId'] ?? 0);
 
-if ($action !== 'getChildChats' || $dealId <= 0)
+if ($action === 'joinChildChat')
 {
-    // Неверный запрос — возвращаем пустой массив
-    header('Content-Type: application/json');
-    echo json_encode([]);
-    die();
+    joinChildChat($dealId);
 }
 
-// ==================================================================
+if ($action !== 'getChildChats' || $dealId <= 0)
+{
+    sendJsonResponse([]);
+}
+
+// Список дочерних чатов доступен только из активной сессии
+// пользователю, который может читать саму сделку.
+if (!check_bitrix_sessid() || !canReadDeal($dealId))
+{
+    sendJsonResponse([]);
+}
+
 // ПОИСК СМАРТ-ПРОЦЕССОВ, ПРИВЯЗАННЫХ К СДЕЛКЕ
-// ==================================================================
 
 /**
  * Связь смарт-процесс <-> сделка хранится в таблице b_crm_entity_relation.
@@ -114,9 +110,7 @@ while ($row = $res->Fetch())
 }
 */
 
-// ==================================================================
 // СБОР ДАННЫХ О ЧАТАХ НАЙДЕННЫХ СМАРТ-ПРОЦЕССОВ
-// ==================================================================
 
 $result = [];
 
@@ -139,7 +133,7 @@ foreach ($smartProcessItems as $item)
 
     // --- Чата нет: возвращаем смарт-процесс в режиме приглашения ---
     // Кнопка рендерится с надписью "Пригласить к обсуждению" и аватарами.
-    // При клике joinChat() создаст чат автоматически.
+    // При клике выбранный механизм создаст чат автоматически.
     if ($chatId <= 0)
     {
         $result[] = [
@@ -201,9 +195,7 @@ foreach ($smartProcessItems as $item)
     ];
 }
 
-// ==================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ==================================================================
 
 /**
  * Получает заголовок (TITLE) элемента смарт-процесса по его typeId и itemId.
@@ -268,9 +260,117 @@ function getUserInfos(int $entityTypeId, int $entityId): array
     return $userInfos;
 }
 
-// ==================================================================
-// ОТВЕТ
-// ==================================================================
+/**
+ * Присоединяет текущего пользователя к чату СП по праву чтения сделки.
+ */
+function joinChildChat(int $dealId): void
+{
+    if (!check_bitrix_sessid())
+    {
+        sendJsonResponse(['error' => 'session']);
+    }
 
-header('Content-Type: application/json');
-echo json_encode($result);
+    $entityTypeId = (int)($_POST['entityTypeId'] ?? 0);
+    $entityId = (int)($_POST['entityId'] ?? 0);
+    if (
+        $dealId <= 0
+        || $entityId <= 0
+        || $entityTypeId !== CHAT_TRANSPARENT_SMART_PROCESS_TYPE_ID
+    )
+    {
+        sendJsonResponse(['error' => 'invalid']);
+    }
+
+    $userId = (int)\Bitrix\Main\Engine\CurrentUser::get()->getId();
+    if ($userId <= 0)
+    {
+        sendJsonResponse(['error' => 'user']);
+    }
+
+    if (CHAT_TRANSPARENT_ACCESS_MODE !== 'deal')
+    {
+        sendJsonResponse(['error' => 'access_mode']);
+    }
+
+    if (!canReadDeal($dealId))
+    {
+        sendJsonResponse(['error' => 'access_deal']);
+    }
+
+    $relationManager = \Bitrix\Crm\Service\Container::getInstance()->getRelationManager();
+    $parent = new \Bitrix\Crm\ItemIdentifier(CHAT_TRANSPARENT_DEAL_TYPE_ID, $dealId);
+    $allChildren = $relationManager->getChildElements($parent);
+    $isRelated = false;
+
+    foreach ($allChildren as $child)
+    {
+        if (
+            $child->getEntityTypeId() === $entityTypeId
+            && $child->getEntityId() === $entityId
+        )
+        {
+            $isRelated = true;
+            break;
+        }
+    }
+
+    if (!$isRelated)
+    {
+        sendJsonResponse(['error' => 'not_related']);
+    }
+
+    $chatId = (int)\Bitrix\Crm\Integration\Im\Chat::getChatId($entityTypeId, $entityId);
+    if ($chatId > 0)
+    {
+        // Контекст user_id=0 — штатный приём ядра CRM:
+        // он пропускает IM-проверку Extend после наших CRM-проверок.
+        $chat = new \CIMChat(0);
+        $chat->AddUser($chatId, [$userId], false);
+    }
+    else
+    {
+        $chatId = (int)\Bitrix\Crm\Integration\Im\Chat::createChat([
+            'ENTITY_TYPE' => \CCrmOwnerType::ResolveName($entityTypeId),
+            'ENTITY_ID' => $entityId,
+            'USER_ID' => $userId,
+            'ENABLE_PERMISSION_CHECK' => false,
+        ]);
+    }
+
+    if ($chatId <= 0)
+    {
+        sendJsonResponse(['error' => 'chat']);
+    }
+
+    sendJsonResponse(['chatId' => $chatId]);
+}
+
+/**
+ * Проверяет право текущего пользователя на чтение сделки.
+ */
+function canReadDeal(int $dealId): bool
+{
+    if ($dealId <= 0)
+    {
+        return false;
+    }
+
+    return \Bitrix\Crm\Service\Container::getInstance()
+        ->getUserPermissions()
+        ->item()
+        ->canRead(CHAT_TRANSPARENT_DEAL_TYPE_ID, $dealId);
+}
+
+/**
+ * Возвращает JSON и завершает AJAX-запрос.
+ */
+function sendJsonResponse(array $data): void
+{
+    header('Content-Type: application/json');
+    echo json_encode($data);
+    die();
+}
+
+// ОТВЕТ
+
+sendJsonResponse($result);
